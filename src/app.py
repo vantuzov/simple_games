@@ -2,6 +2,8 @@
 
 import pygame
 
+from src.models.board import Board
+
 
 class App:
     """Управляет окном Pygame и главным игровым циклом."""
@@ -21,6 +23,7 @@ class App:
         pygame.display.set_caption("Шахматы")
         self.clock = pygame.time.Clock()
         self.running = False
+        self.board = Board()
 
     def draw_board(self) -> None:
         """Отрисовывает пустую шахматную доску."""
