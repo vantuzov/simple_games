@@ -135,6 +135,26 @@ class BoardTests(unittest.TestCase):
         self.assertTrue(board.promote_pawn("queen"))
         self.assertEqual(board.grid[0][0].piece_type, "queen")
 
+    def test_mate_position_is_detected(self) -> None:
+        board = Board()
+        board.grid = [[None for _ in range(8)] for _ in range(8)]
+        board.grid[0][0] = Piece("white", "king")
+        board.grid[0][1] = Piece("black", "queen")
+        board.grid[0][2] = Piece("black", "king")
+        board.current_turn = "white"
+
+        self.assertTrue(board.is_checkmate("white"))
+
+    def test_stalemate_position_is_detected(self) -> None:
+        board = Board()
+        board.grid = [[None for _ in range(8)] for _ in range(8)]
+        board.grid[7][0] = Piece("white", "king")
+        board.grid[5][1] = Piece("black", "king")
+        board.grid[6][2] = Piece("black", "queen")
+        board.current_turn = "white"
+
+        self.assertTrue(board.is_stalemate("white"))
+
 
 if __name__ == "__main__":
     unittest.main()
