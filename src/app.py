@@ -31,6 +31,7 @@ class App:
         self.selected: tuple[int, int] | None = None
         self.legal_moves: list[tuple[int, int]] = []
         self.status_message = ""
+        self.promotion_buttons: list[tuple[str, pygame.Rect]] = []
 
     def draw_board(self) -> None:
         """Отрисовывает доску с начальной расстановкой фигур."""
@@ -41,6 +42,22 @@ class App:
             self.legal_moves,
             self.status_message,
         )
+        if self.promotion_buttons:
+            labels = {
+                "queen": "Ферзь",
+                "rook": "Ладья",
+                "bishop": "Слон",
+                "knight": "Конь",
+            }
+            for piece_type, rect in self.promotion_buttons:
+                pygame.draw.rect(self.screen, (70, 130, 180), rect)
+                label = self.renderer.status_font.render(
+                    labels[piece_type],
+                    True,
+                    (255, 255, 255),
+                )
+                label_rect = label.get_rect(center=rect.center)
+                self.screen.blit(label, label_rect)
 
     def handle_events(self) -> None:
         """Обрабатывает события окна Pygame."""
@@ -52,7 +69,19 @@ class App:
                     self.restart()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
+                    if self.handle_promotion_click(event.pos):
+                        continue
                     self.handle_click(event.pos)
+
+    def handle_promotion_click(self, position: tuple[int, int]) -> bool:
+        """Обрабатывает выбор фигуры для превращения."""
+        for piece_type, rect in self.promotion_buttons:
+            if rect.collidepoint(position):
+                if self.board.promote_pawn(piece_type):
+                    self.promotion_buttons = []
+                    self.update_game_status()
+                return True
+        return False
 
     def restart(self) -> None:
         """Начинает новую шахматную партсию."""
@@ -63,6 +92,8 @@ class App:
 
     def handle_click(self, position: tuple[int, int]) -> None:
         """Обрабатывает выбор фигуры и попытку перемещения."""
+        if self.board.promotion_pending is not None:
+            return
         column = position[0] // self.renderer.square_size
         row = position[1] // self.renderer.square_size
         if row >= Board.BOARD_SIZE or column >= Board.BOARD_SIZE:
@@ -85,13 +116,10 @@ class App:
         if clicked in self.legal_moves:
             if self.board.move(self.selected, clicked):
                 self.status_message = ""
-                if self.board.is_checkmate(self.board.current_turn):
-                    winner = "Белые" if self.board.current_turn == "black" else "Чёрные"
-                    self.status_message = f"Мат. Победили {winner}"
-                elif self.board.is_stalemate(self.board.current_turn):
-                    self.status_message = "Пат. Ничья"
-                elif self.board.is_in_check(self.board.current_turn):
-                    self.status_message = "Шах"
+                if self.board.promotion_pending is not None:
+                    self.create_promotion_buttons()
+                else:
+                    self.update_game_status()
         elif piece is not None and piece.color == self.board.current_turn:
             moves = self.board.get_legal_moves(clicked)
             if moves:
@@ -103,6 +131,36 @@ class App:
 
         self.selected = None
         self.legal_moves = []
+
+    def create_promotion_buttons(self) -> None:
+        """Создаёт кнопки выбора фигуры для превращения."""
+        labels = {
+            "queen": "Ферзь",
+            "rook": "Ладья",
+            "bishop": "Слон",
+            "knight": "Конь",
+        }
+        self.promotion_buttons = []
+        for index, piece_type in enumerate(labels):
+            rect = pygame.Rect(
+                250 + index * 130,
+                735,
+                120,
+                50,
+            )
+            self.promotion_buttons.append((piece_type, rect))
+
+    def update_game_status(self) -> None:
+        """Обновляет шах, мат или пат после хода."""
+        if self.board.is_checkmate(self.board.current_turn):
+            winner = "Белые" if self.board.current_turn == "black" else "Чёрные"
+            self.status_message = f"Мат. Победили {winner}"
+        elif self.board.is_stalemate(self.board.current_turn):
+            self.status_message = "Пат. Ничья"
+        elif self.board.is_in_check(self.board.current_turn):
+            self.status_message = "Шах"
+        else:
+            self.status_message = ""
 
     def run(self) -> None:
         """Запускает главный игровой цикл."""

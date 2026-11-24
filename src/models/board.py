@@ -20,6 +20,8 @@ class Board:
         self.last_move: dict[str, Position] | None = None
         self.move_history: list[dict[str, object]] = []
         self.captured_pieces: list[Piece] = []
+        self.en_passant_target: Position | None = None
+        self.promotion_pending: Position | None = None
         self.setup_initial_position()
 
     def is_inside(self, row: int, column: int) -> bool:
@@ -102,6 +104,8 @@ class Board:
                     target = (row + row_delta, column + column_delta)
                     if self._can_move_to(target, piece):
                         moves.append(target)
+            for target in self._castling_moves(row, column, piece):
+                moves.append(target)
             return moves
         return []
 
@@ -122,12 +126,44 @@ class Board:
 
             captured = self.grid[target[0]][target[1]]
             moving_piece = self.grid[position[0]][position[1]]
+            ep_capture = None
+            if (
+                moving_piece is not None
+                and moving_piece.piece_type == "pawn"
+                and target == self.en_passant_target
+                and target_piece is None
+            ):
+                ep_row = position[0]
+                ep_capture = self.grid[ep_row][target[1]]
+                self.grid[ep_row][target[1]] = None
             self.grid[target[0]][target[1]] = moving_piece
             self.grid[position[0]][position[1]] = None
+
+            is_castling = (
+                moving_piece is not None
+                and moving_piece.piece_type == "king"
+                and abs(target[1] - position[1]) == 2
+            )
+            rook = None
+            rook_start = None
+            rook_target = None
+            if is_castling:
+                rook_column = 7 if target[1] == 6 else 0
+                rook_target_column = 5 if target[1] == 6 else 3
+                rook = self.grid[position[0]][rook_column]
+                rook_start = (position[0], rook_column)
+                rook_target = (position[0], rook_target_column)
+                self.grid[position[0]][rook_column] = None
+                self.grid[rook_target[0]][rook_target[1]] = rook
 
             if not self.is_in_check(piece.color):
                 legal_moves.append(target)
 
+            if is_castling:
+                self.grid[rook_start[0]][rook_start[1]] = rook
+                self.grid[rook_target[0]][rook_target[1]] = None
+            if ep_capture is not None:
+                self.grid[position[0]][target[1]] = ep_capture
             self.grid[position[0]][position[1]] = moving_piece
             self.grid[target[0]][target[1]] = captured
         return legal_moves
@@ -139,12 +175,51 @@ class Board:
 
         piece = self.grid[start[0]][start[1]]
         captured = self.grid[target[0]][target[1]]
+        ep_pawn = None
+        if (
+            piece is not None
+            and piece.piece_type == "pawn"
+            and target == self.en_passant_target
+            and captured is None
+        ):
+            ep_pawn = self.grid[start[0]][target[1]]
+            captured = ep_pawn
+            self.grid[start[0]][target[1]] = None
         if captured is not None:
             self.captured_pieces.append(captured)
         self.grid[target[0]][target[1]] = piece
         self.grid[start[0]][start[1]] = None
         if piece is not None:
             piece.has_moved = True
+
+        if (
+            piece is not None
+            and piece.piece_type == "king"
+            and abs(target[1] - start[1]) == 2
+        ):
+            rook_column = 7 if target[1] == 6 else 0
+            rook_target_column = 5 if target[1] == 6 else 3
+            rook = self.grid[start[0]][rook_column]
+            self.grid[start[0]][rook_column] = None
+            self.grid[start[0]][rook_target_column] = rook
+            if rook is not None:
+                rook.has_moved = True
+
+        self.en_passant_target = None
+        if (
+            piece is not None
+            and piece.piece_type == "pawn"
+            and abs(target[0] - start[0]) == 2
+        ):
+            middle_row = (target[0] + start[0]) // 2
+            self.en_passant_target = (middle_row, target[1])
+
+        if (
+            piece is not None
+            and piece.piece_type == "pawn"
+            and target[0] in (0, 7)
+        ):
+            self.promotion_pending = target
 
         self.move_history.append(
             {
@@ -317,7 +392,80 @@ class Board:
                 and target_piece.color != piece.color
             ):
                 moves.append(target)
+            if (
+                self.is_inside(*target)
+                and target_piece is None
+                and (target[0], target[1]) == self.en_passant_target
+            ):
+                adjacent = self.get_piece((row, target[1]))
+                if (
+                    adjacent is not None
+                    and adjacent.color != piece.color
+                    and adjacent.piece_type == "pawn"
+                ):
+                    moves.append(target)
         return moves
+
+    def _castling_moves(
+        self,
+        row: int,
+        column: int,
+        king: Piece,
+    ) -> list[Position]:
+        """Возвращает доступные ходы для рокировки."""
+        moves = []
+        if king.has_moved or self.is_in_check(king.color):
+            return moves
+
+        for rook_column, target_column, between in (
+            (7, 6, (5, 6)),
+            (0, 2, (1, 2, 3)),
+        ):
+            rook = self.grid[row][rook_column]
+            if (
+                rook is None
+                or rook.piece_type != "rook"
+                or rook.color != king.color
+                or rook.has_moved
+            ):
+                continue
+            if any(self.grid[row][cell] is not None for cell in between):
+                continue
+
+            king_path = (
+                (row, column),
+                (row, column + 1),
+                (row, target_column),
+            )
+            if target_column == 2:
+                king_path = (
+                    (row, column),
+                    (row, column - 1),
+                    (row, target_column),
+                )
+            opponent = "black" if king.color == "white" else "white"
+            if any(
+                self.is_square_attacked(square, opponent)
+                for square in king_path
+            ):
+                continue
+            moves.append((row, target_column))
+        return moves
+
+    def promote_pawn(self, piece_type: str) -> bool:
+        """Превращает пешку в выбранную фигуру."""
+        if (
+            self.promotion_pending is None
+            or piece_type not in ("queen", "rook", "bishop", "knight")
+        ):
+            return False
+        row, column = self.promotion_pending
+        pawn = self.grid[row][column]
+        if pawn is None or pawn.piece_type != "pawn":
+            return False
+        pawn.piece_type = piece_type
+        self.promotion_pending = None
+        return True
 
     def _knight_moves(
         self,

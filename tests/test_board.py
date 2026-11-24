@@ -100,6 +100,41 @@ class BoardTests(unittest.TestCase):
 
         self.assertGreater(len(board.get_all_legal_moves("white")), 0)
 
+    def test_castling_moves_rook_and_king(self) -> None:
+        board = Board()
+        board.grid = [[None for _ in range(8)] for _ in range(8)]
+        board.grid[7][4] = Piece("white", "king")
+        board.grid[7][7] = Piece("white", "rook")
+        board.current_turn = "white"
+
+        self.assertIn((7, 6), board.get_legal_moves((7, 4)))
+        self.assertTrue(board.move((7, 4), (7, 6)))
+        self.assertEqual(board.grid[7][5].piece_type, "rook")
+        self.assertEqual(board.grid[7][6].piece_type, "king")
+
+    def test_en_passant_captures_adjacent_pawn(self) -> None:
+        board = Board()
+        board.grid = [[None for _ in range(8)] for _ in range(8)]
+        board.grid[3][4] = Piece("white", "pawn")
+        board.grid[3][5] = Piece("black", "pawn")
+        board.en_passant_target = (2, 5)
+        board.current_turn = "white"
+
+        self.assertIn((2, 5), board.get_legal_moves((3, 4)))
+        self.assertTrue(board.move((3, 4), (2, 5)))
+        self.assertIsNone(board.grid[3][5])
+
+    def test_pawn_promotion_to_queen(self) -> None:
+        board = Board()
+        board.grid = [[None for _ in range(8)] for _ in range(8)]
+        board.grid[1][0] = Piece("white", "pawn")
+        board.current_turn = "white"
+
+        self.assertTrue(board.move((1, 0), (0, 0)))
+        self.assertIsNotNone(board.promotion_pending)
+        self.assertTrue(board.promote_pawn("queen"))
+        self.assertEqual(board.grid[0][0].piece_type, "queen")
+
 
 if __name__ == "__main__":
     unittest.main()

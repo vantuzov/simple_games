@@ -93,6 +93,27 @@ class Renderer:
         restart = self.status_font.render("R — перезапуск", True, (220, 220, 220))
         surface.blit(restart, (self.board_size - 210, panel_y + 24))
 
+        captured = ", ".join(
+            piece.piece_type for piece in getattr(board, "captured_pieces", [])
+        )
+        if captured:
+            captured_text = self.status_font.render(
+                "Взято: " + captured,
+                True,
+                (220, 220, 220),
+            )
+            surface.blit(captured_text, (16, panel_y + 52))
+
+        history = getattr(board, "move_history", [])
+        if history:
+            move_number = len(history)
+            history_text = self.status_font.render(
+                f"Ходов: {move_number}",
+                True,
+                (220, 220, 220),
+            )
+            surface.blit(history_text, (self.board_size - 210, panel_y + 52))
+
     def _draw_piece(
         self,
         surface: pygame.Surface,
