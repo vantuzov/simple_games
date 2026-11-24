@@ -1,9 +1,12 @@
 """Точка входа в приложение шахмат."""
 
+from src.app import App
+
 
 def main() -> None:
     """Запускает приложение."""
-    pass
+    app = App()
+    app.run()
 
 
 if __name__ == "__main__":
