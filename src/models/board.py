@@ -17,6 +17,9 @@ class Board:
             for _ in range(self.BOARD_SIZE)
         ]
         self.current_turn = "white"
+        self.last_move: dict[str, Position] | None = None
+        self.move_history: list[dict[str, object]] = []
+        self.captured_pieces: list[Piece] = []
         self.setup_initial_position()
 
     def is_inside(self, row: int, column: int) -> bool:
@@ -135,13 +138,48 @@ class Board:
             return False
 
         piece = self.grid[start[0]][start[1]]
+        captured = self.grid[target[0]][target[1]]
+        if captured is not None:
+            self.captured_pieces.append(captured)
         self.grid[target[0]][target[1]] = piece
         self.grid[start[0]][start[1]] = None
         if piece is not None:
             piece.has_moved = True
 
+        self.move_history.append(
+            {
+                "start": start,
+                "target": target,
+                "piece": piece,
+                "captured": captured,
+            }
+        )
+        self.last_move = {"start": start, "target": target}
+
         self.current_turn = "black" if self.current_turn == "white" else "white"
         return True
+
+    def get_all_legal_moves(self, color: str) -> list[Position]:
+        """Возвращает все легальные ходы для указанного цвета."""
+        original_turn = self.current_turn
+        self.current_turn = color
+        moves = []
+        for row in range(self.BOARD_SIZE):
+            for column in range(self.BOARD_SIZE):
+                piece = self.grid[row][column]
+                if piece is not None and piece.color == color:
+                    for target in self.get_legal_moves((row, column)):
+                        moves.append(target)
+        self.current_turn = original_turn
+        return moves
+
+    def is_checkmate(self, color: str) -> bool:
+        """Проверяет, объявлен ли мат указанному королю."""
+        return self.is_in_check(color) and not self.get_all_legal_moves(color)
+
+    def is_stalemate(self, color: str) -> bool:
+        """Проверяет, возник ли пат для указанного цвета."""
+        return not self.is_in_check(color) and not self.get_all_legal_moves(color)
 
     def find_king(self, color: str) -> Position | None:
         """Находит позицию короля указанного цвета."""
